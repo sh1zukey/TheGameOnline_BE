@@ -98,61 +98,64 @@ io.on("connection", (socket) => {
       const roomObject = progressValue.roomObject
       console.log(roomObject)
 
-      const nextTurnIndex =  roomObject.gameTurnIndex === roomObject.playerLimit - 1 ? 0 : roomObject.gameTurnIndex + 1
-      if(canPlay(roomObject, nextTurnIndex)) {
-        let cardCount = 0
-        roomObject.players.map(player => cardCount += player.hands.length)
-        cardCount += roomObject.deck.length
+      let cardCount = 0
+      roomObject.players.map(player => cardCount += player.hands.length)
+      cardCount += roomObject.deck.length
 
-        console.log(cardCount)
+      console.log(cardCount)
 
-        if(cardCount <= 9 && roomObject.gameState === state.progress) {
-          roomObject.gameState = state.preEnd
+      if(cardCount <= 9 && roomObject.gameState === state.progress) {
+        roomObject.gameState = state.preEnd
 
-          io.to(roomObject.roomId).emit("game-end", {
-            func: "preEnd"
-          })
-        } else if(cardCount === 0) {
-          roomObject.gameState = state.end
+        io.to(roomObject.roomId).emit("game-end", {
+          func: "preEnd"
+        })
+      } else if(cardCount === 0) {
+        roomObject.gameState = state.end
 
-          io.to(roomObject.roomId).emit("game-end", {
-            func: "end"
-          })
+        io.to(roomObject.roomId).emit("game-end", {
+          func: "end"
+        })
+      }
+
+      if(progressValue.func === "play") {
+        roomObject.players[roomObject.gameTurnIndex].plays++
+
+        io.to(roomObject.roomId).emit("game-update", {
+          roomObject: roomObject,
+          func: "update"
+        })
+      } else if(progressValue.func === "turn-end") {
+        const nextTurnIndex =  roomObject.gameTurnIndex === roomObject.playerLimit - 1 ? 0 : roomObject.gameTurnIndex + 1
+
+        roomObject.players[roomObject.gameTurnIndex].hands = roomObject.players[roomObject.gameTurnIndex].hands.concat(roomObject.deck.splice(-roomObject.players[roomObject.gameTurnIndex].plays)).sort(compareFunc)
+        roomObject.players[roomObject.gameTurnIndex].plays = 0
+        roomObject.gameTurnIndex = nextTurnIndex
+
+        if(roomObject.deck.length === 0) {
+          roomObject.minPlays = 1
         }
 
-        if(progressValue.func === "play") {
-          roomObject.players[roomObject.gameTurnIndex].plays++
-
-          io.to(roomObject.roomId).emit("game-update", {
-            roomObject: roomObject,
-            func: "update"
-          })
-        } else if(progressValue.func === "turn-end") {
-          roomObject.players[roomObject.gameTurnIndex].hands = roomObject.players[roomObject.gameTurnIndex].hands.concat(roomObject.deck.splice(-roomObject.players[roomObject.gameTurnIndex].plays)).sort(compareFunc)
-          roomObject.players[roomObject.gameTurnIndex].plays = 0
-          roomObject.gameTurnIndex = nextTurnIndex
-
-          if(roomObject.deck.length === 0) {
-            roomObject.minPlays = 1
-          }
-
+        if(canPlay(roomObject, nextTurnIndex)) {
           io.to(roomObject.roomId).emit("game-update", {
             roomObject: roomObject,
             func: "next-turn"
           })
-        }
-        redisClient.set(roomObject.roomId, JSON.stringify(roomObject), redis.print)
-      } else {
-        if(roomObject.gameState === state.preEnd) {
-          io.to(roomObject.roomId).emit("game-end", {
-            func: "preExitEnd"
-          })
         } else {
-          io.to(roomObject.roomId).emit("game-end", {
-            func: "badEnd"
-          })
+          if(roomObject.gameState === state.preEnd) {
+            io.to(roomObject.roomId).emit("game-end", {
+              func: "preExitEnd"
+            })
+          } else {
+            io.to(roomObject.roomId).emit("game-end", {
+              func: "badEnd"
+            })
+          }
+          redisClient.del(tempRoomId)
+          return
         }
       }
+      redisClient.set(roomObject.roomId, JSON.stringify(roomObject), redis.print)
     })
     socket.on("disconnect", (disconnectValue) => {
       io.to(tempRoomId).clients((_, clients) => {
@@ -195,7 +198,8 @@ function canPlay(roomObject, playerIndex) {
 }
 
 function initDeck() {
-  const deck = Array.from(new Array(98)).map((v,i)=> i + 2)
+  //const deck = Array.from(new Array(98)).map((v,i)=> i + 2)
+  const deck = Array.from(new Array(20)).map((v,i)=> i + 2)
 
   for(let i = deck.length - 1; i > 0; i--){
     const r = Math.floor(Math.random() * (i + 1));
