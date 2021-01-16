@@ -79,7 +79,7 @@ io.on("connection", (socket) => {
           else if(clients.length === roomObject.playerLimit) {
             roomObject.players.push({id: socket.id, name: value.name, hands: [], plays: 0})
             roomObject.players.forEach(player => {
-              player.hands = roomObject.deck.splice(-5).sort(compareFunc)
+              player.hands = roomObject.deck.splice(-6).sort(compareFunc)
             })
             roomObject.gameState = state.progress
             roomObject.gameTurnIndex = 0
