@@ -96,7 +96,8 @@ io.on("connection", (socket) => {
     })
     socket.on("game-progress", (progressValue) => {
       const roomObject = progressValue.roomObject
-      console.log(roomObject)
+      //console.log(roomObject)
+      console.dir(roomObject, {depth: null})
 
       let cardCount = 0
       roomObject.players.map(player => cardCount += player.hands.length)
