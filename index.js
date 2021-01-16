@@ -103,8 +103,6 @@ io.on("connection", (socket) => {
       roomObject.players.map(player => cardCount += player.hands.length)
       cardCount += roomObject.deck.length
 
-      console.log(cardCount)
-
       if(cardCount <= 9 && roomObject.gameState === state.progress) {
         roomObject.gameState = state.preEnd
 
