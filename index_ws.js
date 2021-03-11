@@ -8,7 +8,6 @@ const REDIS_HOST = "0.0.0.0";
 // const server = require('http').createServer(app)
 
 const webSocket = require('ws')
-const wsh = require('ws-heartbeat/server')
 const wss = new webSocket.Server({port: 3031})
 
 setupWsHeartbeat(wss);
