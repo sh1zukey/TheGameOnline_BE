@@ -8,7 +8,7 @@ const REDIS_HOST = "0.0.0.0";
 // const server = require('http').createServer(app)
 
 const webSocket = require('ws')
-const wss = new webSocket.Server({port: 3030})
+const wss = new webSocket.Server({port: 3031})
 
 const redis = require("redis");
 const redisClient = redis.createClient(REDIS_PORT, REDIS_HOST)
