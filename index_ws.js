@@ -24,6 +24,9 @@ wss.on('connection', (ws, req) => {
   ws.on('message',(value) => {
     const json = JSON.parse(value)
 
+    // デバッグ
+    // console.dir(ws)
+
     if(json.func == null) {
       ws.terminate()
       return
@@ -39,12 +42,13 @@ wss.on('connection', (ws, req) => {
       ws.id = json.uuid
       ws.roomId = json.roomId
 
-      // デバッグ
-      console.dir(json)
-
       redisClient.exists(json.roomId, (err, exists) => {
         //ルームを作るか参加か
         if(exists === 0) {
+          if(json.playerLimit === null) {
+            ws.terminate()
+          }
+
           let roomObject = {}
           roomObject.roomId = json.roomId
           roomObject.playerLimit = parseInt(json.playerLimit, 10);
@@ -61,7 +65,7 @@ wss.on('connection', (ws, req) => {
           }
 
           redisClient.set(json.roomId, JSON.stringify(roomObject), redis.print)
-          sendToPlayers("game-ready", wss.clients, roomObject.players, roomObject)
+          sendToPlayers("game-ready", wss.clients, roomObject.roomId, {roomObject: roomObject})
         } else if(exists === 1) {
           redisClient.get(json.roomId, (err, roomResult) => {
             let roomObject = JSON.parse(roomResult)
@@ -70,7 +74,7 @@ wss.on('connection', (ws, req) => {
               // プレイヤー数が上限に達した場合ゲーム開始
               if(roomObject.players.length < roomObject.playerLimit) {
                 redisClient.set(json.roomId, JSON.stringify(roomObject), redis.print)
-                sendToPlayers("game-ready", wss.clients, roomObject.players, roomObject)
+                sendToPlayers("game-ready", wss.clients, roomObject.roomId, {roomObject: roomObject})
               } else if(roomObject.players.length === roomObject.playerLimit) {
                 roomObject.players.forEach(player => {
                   player.hands = roomObject.deck.splice(-6).sort(compareFunc)
@@ -79,7 +83,7 @@ wss.on('connection', (ws, req) => {
                 roomObject.gameTurnIndex = 0
 
                 redisClient.set(json.roomId, JSON.stringify(roomObject), redis.print)
-                sendToPlayers("game-start", wss.clients, roomObject.players, roomObject)
+                sendToPlayers("game-start", wss.clients, roomObject.roomId, {roomObject: roomObject})
               }
             } else {
               ws.terminate()
@@ -93,6 +97,8 @@ wss.on('connection', (ws, req) => {
         return
       }
 
+      console.log("prog")
+
       let roomObject = json.roomObject
 
       // 台札及び手札の残り枚数の計算
@@ -103,21 +109,21 @@ wss.on('connection', (ws, req) => {
       // 台札と手札の残り枚数に応じてクリア、完全クリアを通知
       if(cardCount <= 9 && roomObject.gameState === state.progress) {
         roomObject.gameState = state.preEnd
-        sendToPlayers("game-end", wss.clients, roomObject.players, {endType: "preEnd"})
+        sendToPlayers("game-end", wss.clients, roomObject.roomId, {endType: "preEnd"})
       } else if(cardCount === 0) {
         roomObject.gameState = state.end
-        sendToPlayers("game-end", wss.clients, roomObject.players, {endType: "perfectEnd"})
+        sendToPlayers("game-end", wss.clients, roomObject.roomId, {endType: "perfectEnd"})
       }
 
       if(json.progType === "play") {
         if(canPlay(roomObject, roomObject.gameTurnIndex)) {
           roomObject.players[roomObject.gameTurnIndex].plays++
-          sendToPlayers("game-update", wss.clients, roomObject.players, {updateType: "update"})
+          sendToPlayers("game-update", wss.clients, roomObject.roomId, {roomObject: roomObject, updateType: "update"})
         } else {
           if(roomObject.gameState === state.preEnd) {
-            sendToPlayers("game-end", wss.clients, roomObject.players, {endType: "preForcedEnd"})
+            sendToPlayers("game-end", wss.clients, roomObject.roomId, {endType: "preForcedEnd"})
           } else {
-            sendToPlayers("game-end", wss.clients, roomObject.players, {endType: "badEnd"})
+            sendToPlayers("game-end", wss.clients, roomObject.roomId, {endType: "badEnd"})
           }
           redisClient.del(roomObject.roomId)
           return
@@ -134,12 +140,12 @@ wss.on('connection', (ws, req) => {
             roomObject.minPlays = 1
           }
 
-          sendToPlayers("game-update", wss.clients, roomObject.players, {updateType: "next-turn"})
+          sendToPlayers("game-update", wss.clients, roomObject.roomId, {roomObject: roomObject, updateType: "next-turn"})
         } else {
           if(roomObject.gameState === state.preEnd) {
-            sendToPlayers("game-end", wss.clients, roomObject.players, {endType: "preForcedEnd"})
+            sendToPlayers("game-end", wss.clients, roomObject.roomId, {endType: "preForcedEnd"})
           } else {
-            sendToPlayers("game-end", wss.clients, roomObject.players, {endType: "badEnd"})
+            sendToPlayers("game-end", wss.clients, roomObject.roomId, {endType: "badEnd"})
           }
           redisClient.del(roomObject.roomId)
           return
@@ -149,14 +155,18 @@ wss.on('connection', (ws, req) => {
     }
 
     ws.on('error',() => {
+      console.log("error")
       if(ws.roomId !== null) {
+        sendToPlayers("game-error", wss.clients, ws.roomId, {msg: "参加しているプレイヤーが通信エラーのためゲームを終了します。"})
         roomPlayerTerminate(wss.clients, ws.roomId)
         redisClient.del(ws.roomId)
       }
     })
 
     ws.on('close',() => {
+      console.log("close")
       if(ws.roomId !== null) {
+        sendToPlayers("game-error", wss.clients, ws.roomId, {msg: "他のプレイヤーが切断したためゲームを終了します。"})
         roomPlayerTerminate(wss.clients, ws.roomId)
         redisClient.del(ws.roomId)
       }
@@ -190,10 +200,12 @@ function canPlayToLead(playCardNumber, leadCardNumber, order) {
   return false
 }
 
-function sendToPlayers(func, clients, players, data) {
+function sendToPlayers(func, clients, roomId, data) {
   clients.forEach((client) => {
-    if(players.id.indexOf(client.id) >= 0) {
-      client.send(JSON.stringify({func: func, data: data}))
+    if(client.roomId === roomId) {
+      let sendObject = {}
+      Object.assign(sendObject, {func: func}, data)
+      client.send(JSON.stringify(sendObject))
     }
   })
 }
