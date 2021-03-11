@@ -8,7 +8,10 @@ const REDIS_HOST = "0.0.0.0";
 // const server = require('http').createServer(app)
 
 const webSocket = require('ws')
+const wsh = require('ws-heartbeat/server')
 const wss = new webSocket.Server({port: 3031})
+
+setupWsHeartbeat(wss);
 
 const redis = require("redis");
 const redisClient = redis.createClient(REDIS_PORT, REDIS_HOST)
@@ -21,18 +24,25 @@ const state = {
 }
 
 wss.on('connection', (ws, req) => {
+  const interval = setInterval(function ping() {
+    console.log("heartbeat-interval")
+    ws.send(JSON.stringify({func: "game-heartbeat", kind: "ping"}))
+  }, 15000);
+
   ws.on('message',(value) => {
     const json = JSON.parse(value)
 
     // デバッグ
-    // console.dir(ws)
+    //console.dir(wss.clients.length)
 
     if(json.func == null) {
       ws.terminate()
       return
     }
 
-    if(json.func === "join-game") {
+    if(json.func === "game-heartbeat") {
+
+    } else if(json.func === "join-game") {
       if(json.roomId == null || json.name == null || json.uuid == null) {
         ws.terminate()
         return
@@ -154,25 +164,50 @@ wss.on('connection', (ws, req) => {
       redisClient.set(roomObject.roomId, JSON.stringify(roomObject), redis.print)
     }
 
-    ws.on('error',() => {
-      console.log("error")
-      if(ws.roomId !== null) {
-        sendToPlayers("game-error", wss.clients, ws.roomId, {msg: "参加しているプレイヤーが通信エラーのためゲームを終了します。"})
-        roomPlayerTerminate(wss.clients, ws.roomId)
-        redisClient.del(ws.roomId)
-      }
-    })
+  ws.on('error',() => {
+    console.log("error")
+    clearInterval(interval)
+    if(ws.roomId !== null) {
+      sendToPlayers("game-error", wss.clients, ws.roomId, {msg: "参加しているプレイヤーが通信エラーのためゲームを終了します。"})
+      roomPlayerTerminate(wss.clients, ws.roomId)
+      redisClient.del(ws.roomId)
+    }
+  })
 
-    ws.on('close',() => {
-      console.log("close")
-      if(ws.roomId !== null) {
-        sendToPlayers("game-error", wss.clients, ws.roomId, {msg: "他のプレイヤーが切断したためゲームを終了します。"})
-        roomPlayerTerminate(wss.clients, ws.roomId)
-        redisClient.del(ws.roomId)
-      }
-    })
+  ws.on('close',() => {
+    console.log("close")
+    clearInterval(interval)
+    if(ws.roomId !== null) {
+      sendToPlayers("game-error", wss.clients, ws.roomId, {msg: "他のプレイヤーが切断したためゲームを終了します。"})
+      roomPlayerTerminate(wss.clients, ws.roomId)
+      redisClient.del(ws.roomId)
+    }
+  })
   })
 })
+
+function setupWsHeartbeat(wss) {
+  function noop() {}
+  function heartbeat() {
+    this.isAlive = true;
+  }
+
+  wss.on('connection', function connection(ws) {
+    ws.isAlive = true;
+    ws.on('pong', heartbeat);
+  });
+
+  const interval = setInterval(function ping() {
+    wss.clients.forEach(function each(ws) {
+      // client did not respond the ping (pong)
+      if (ws.isAlive === false) return ws.terminate();
+
+      ws.isAlive = false;
+      ws.ping(noop);
+    });
+  }, 30000);
+}
+
 
 function canPlay(roomObject, playerIndex) {
   let canPlayCount = 0
