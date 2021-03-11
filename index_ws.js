@@ -116,7 +116,7 @@ wss.on('connection', (ws, req) => {
       }
 
       if(json.progType === "play") {
-        if(canPlay(roomObject, roomObject.gameTurnIndex)) {
+        if(roomObject.players[roomObject.gameTurnIndex].plays >= roomObject.minPlays || canPlay(roomObject, roomObject.gameTurnIndex)) {
           roomObject.players[roomObject.gameTurnIndex].plays++
           sendToPlayers("game-update", wss.clients, roomObject.roomId, {roomObject: roomObject, updateType: "update"})
         } else {
