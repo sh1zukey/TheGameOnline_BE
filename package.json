@@ -4,7 +4,8 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "run": "node index.js"
+    "run": "node index.js",
+    "run-ws": "node index_ws.js"
   },
   "author": "",
   "license": "ISC",
@@ -12,6 +13,7 @@
     "express": "^4.17.1",
     "http": "0.0.1-security",
     "redis": "^3.0.2",
-    "socket.io": "^2.4.1"
+    "socket.io": "^2.4.1",
+    "ws": "^7.4.4"
   }
 }
