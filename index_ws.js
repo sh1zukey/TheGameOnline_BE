@@ -32,7 +32,7 @@ wss.on('connection', (ws, req) => {
     const json = JSON.parse(value)
 
     // デバッグ
-    //console.dir(wss.clients.length)
+    console.dir(json)
 
     if(json.func == null) {
       ws.terminate()
