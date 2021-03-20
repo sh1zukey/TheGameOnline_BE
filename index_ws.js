@@ -253,8 +253,8 @@ function roomPlayerTerminate(clients, roomId) {
 }
 
 function initDeck() {
-  const deck = Array.from(new Array(98)).map((v, i)=> i + 2)
-  //const deck = Array.from(new Array(20)).map((v,i)=> i + 2)
+  //const deck = Array.from(new Array(98)).map((v, i)=> i + 2)
+  const deck = Array.from(new Array(20)).map((v,i)=> i + 2)
 
   for(let i = deck.length - 1; i > 0; i--){
     const r = Math.floor(Math.random() * (i + 1));
