@@ -47,10 +47,6 @@ wss.on('connection', (ws, req) => {
         return
       }
 
-      // IDを紐付け
-      ws.id = json.uuid
-      ws.roomId = json.roomId
-
       redisClient.exists(json.roomId, (err, exists) => {
         //ルームを作るか参加か
         if(exists === 0) {
@@ -73,12 +69,16 @@ wss.on('connection', (ws, req) => {
             asc02: [],
           }
 
+          ws.id = json.uuid
+          ws.roomId = json.roomId
           redisClient.set(json.roomId, JSON.stringify(roomObject), redis.print)
           sendToPlayers("game-ready", wss.clients, roomObject.roomId, {roomObject: roomObject})
         } else if(exists === 1) {
           redisClient.get(json.roomId, (err, roomResult) => {
             let roomObject = JSON.parse(roomResult)
             if(roomObject.players.length < roomObject.playerLimit) {
+              ws.id = json.uuid
+              ws.roomId = json.roomId
               roomObject.players.push({id: json.uuid, name: json.name, hands: [], plays: 0})
               // プレイヤー数が上限に達した場合ゲーム開始
               if(roomObject.players.length < roomObject.playerLimit) {
@@ -128,7 +128,7 @@ wss.on('connection', (ws, req) => {
         roomObject.players[roomObject.gameTurnIndex].plays++
         sendToPlayers("game-update", wss.clients, roomObject.roomId, {roomObject: roomObject, updateType: "update"})
 
-        if(!canPlay(roomObject, roomObject.gameTurnIndex)) {
+        if(!canPlay(roomObject, roomObject.gameTurnIndex) && roomObject.players[roomObject.gameTurnIndex].hands.length !== 0) {
           if(roomObject.gameState === state.preEnd) {
             sendToPlayers("game-end", wss.clients, roomObject.roomId, {endType: "preForcedEnd"})
           } else {
