@@ -44,6 +44,7 @@ wss.on('connection', (ws, req) => {
 
     } else if(json.func === "join-game") {
       if(json.roomId == null || json.name == null || json.uuid == null) {
+        ws.error = true
         ws.terminate()
         return
       }
