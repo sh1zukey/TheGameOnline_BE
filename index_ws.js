@@ -35,6 +35,7 @@ wss.on('connection', (ws, req) => {
     console.dir(json)
 
     if(json.func == null) {
+      ws.error = true
       ws.terminate()
       return
     }
@@ -47,10 +48,16 @@ wss.on('connection', (ws, req) => {
         return
       }
 
+      // IDを紐付け
+      ws.id = json.uuid
+      ws.roomId = json.roomId
+      ws.error = false
+
       redisClient.exists(json.roomId, (err, exists) => {
         //ルームを作るか参加か
         if(exists === 0) {
           if(json.playerLimit === null) {
+            ws.error = true
             ws.terminate()
           }
 
@@ -69,16 +76,12 @@ wss.on('connection', (ws, req) => {
             asc02: [],
           }
 
-          ws.id = json.uuid
-          ws.roomId = json.roomId
           redisClient.set(json.roomId, JSON.stringify(roomObject), redis.print)
           sendToPlayers("game-ready", wss.clients, roomObject.roomId, {roomObject: roomObject})
         } else if(exists === 1) {
           redisClient.get(json.roomId, (err, roomResult) => {
             let roomObject = JSON.parse(roomResult)
             if(roomObject.players.length < roomObject.playerLimit) {
-              ws.id = json.uuid
-              ws.roomId = json.roomId
               roomObject.players.push({id: json.uuid, name: json.name, hands: [], plays: 0})
               // プレイヤー数が上限に達した場合ゲーム開始
               if(roomObject.players.length < roomObject.playerLimit) {
@@ -95,6 +98,7 @@ wss.on('connection', (ws, req) => {
                 sendToPlayers("game-start", wss.clients, roomObject.roomId, {roomObject: roomObject})
               }
             } else {
+              ws.error = true
               ws.terminate()
             }
           })
@@ -176,7 +180,7 @@ wss.on('connection', (ws, req) => {
   ws.on('close',() => {
     console.log("close")
     clearInterval(interval)
-    if(ws.roomId !== null) {
+    if(ws.roomId !== null && !ws.error) {
       sendToPlayers("game-error", wss.clients, ws.roomId, {msg: "他のプレイヤーが切断したためゲームを終了します。"})
       roomPlayerTerminate(wss.clients, ws.roomId)
       redisClient.del(ws.roomId)
