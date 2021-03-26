@@ -133,7 +133,7 @@ wss.on('connection', (ws, req) => {
         roomObject.players[roomObject.gameTurnIndex].plays++
         sendToPlayers("game-update", wss.clients, roomObject.roomId, {roomObject: roomObject, updateType: "update"})
 
-        if(!canPlay(roomObject, roomObject.gameTurnIndex) && roomObject.players[roomObject.gameTurnIndex].hands.length !== 0) {
+        if(!canPlay(roomObject, roomObject.gameTurnIndex) && roomObject.players[roomObject.gameTurnIndex].hands.length !== 0 && roomObject.players[roomObject.gameTurnIndex].plays < roomObject.minPlays) {
           if(roomObject.gameState === state.preEnd) {
             sendToPlayers("game-end", wss.clients, roomObject.roomId, {endType: "preForcedEnd"})
           } else {
